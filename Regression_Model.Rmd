@@ -1,0 +1,293 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+The dataset contains information on 651 movies released before 2016. The data is randomly selected but not randomly assigned. Hence,any information or conlcusion derived from this project can be generalized but can't be used to determine causality. 
+
+* * *
+
+## Part 2: Research question
+
+To find out what attributes are an integral contributor ti the popularity (audience score) of a movie and to predict the popularity if a movie from some given attributes .
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+Refining the dataset to the required attributes only.
+
+```{r}
+df<-movies
+
+df2<-df%>%select(title_type,genre,runtime,mpaa_rating,studio,thtr_rel_month,thtr_rel_day,imdb_rating,imdb_num_votes,critics_rating,critics_score,audience_rating,audience_score,best_actor_win)
+
+str(df2)
+
+
+```
+
+Telling whther a movie was popular or not after it has been selected(or awarded) for an oscar award seems pointless since it would be obvious that one would like to predict the movie's popularity beforehand.
+
+
+Checking for null(missing) values
+
+```{r}
+library(Amelia)
+missmap(df2,main = "missing values",col = c('yellow','black'),legend = F,y.at = c(1),y.labels = c(''))
+```
+```{r}
+df2<-df2 %>% filter(!is.na(df2$studio)) 
+df2<-df2 %>% filter(!is.na(df2$runtime))
+missmap(df2,main = "missing values",col = c('yellow','black'),legend = F,y.at = c(1),y.labels = c(''))
+```
+
+
+Let's check the relationship between the explanatory (numerical variables) and the response variable
+```{r}
+ggplot(df2,aes(x=runtime,y=audience_score))+geom_point(color='blue',alpha=0.5)+stat_smooth(method="lm",se=F)
+```
+
+There does'nt seem to be a good linear relationship between these 2 variables.
+
+```{r}
+ggplot(df2,aes(x=thtr_rel_month,y=audience_score))+geom_point(alpha=0.5)+stat_smooth(method="lm",se=F) +geom_jitter()
+```
+The distribution seems to be completely random and rel_month might not prove out to be a good predictor.
+
+```{r}
+ggplot(df2,aes(x=thtr_rel_day ,y=audience_score))+geom_point(alpha=0.5)+stat_smooth(method="lm",se=F) + geom_jitter()
+```
+This also seems to have no relation..
+
+```{r}
+ggplot(df2,aes(x=imdb_rating  ,y=audience_score))+geom_point(alpha=0.5)+stat_smooth(method="lm",se=F)
+```
+There seems  to be a strong relation(positive) between the imdb rating and the audience ratings.
+This is quite relatable to considering the quality with which imdb rates keeping everything in mind.
+
+```{r}
+ggplot(df2,aes(x=imdb_num_votes ,y=audience_score))+geom_point(alpha=0.5)+stat_smooth(method="lm",se=F)
+```
+There seems to be a moderate relation between these 2  .
+```{r}
+ggplot(df2,aes(x=critics_score ,y=audience_score))+geom_point(alpha=0.5)+stat_smooth(method="lm",se=F)
+```
+The critics score and the audience score also tend to have a moderaltely strong and positive correlation.
+
+
+Let's have a look at the correlation coefficients of the explanatory variables
+
+```{r}
+library(corrgram)
+library(corrplot)
+```
+
+```{r}
+colnames(df2)
+df2$imdb_num_votes<-as.numeric(df2$imdb_num_votes)
+num.cols<-c(3,6,7,8,9,11)
+cor.data<-cor(df2[,num.cols])
+
+cor.data
+```
+
+```{r}
+corrplot(cor.data,method = 'color')
+```
+The critics score and imdb  rating are highly correlated which would cause collinearity.
+
+Looking at the relationships, one thing is clear that theatre release month and date have almost no role in the prediction.
+* * *
+
+## Part 4: Modeling
+
+Modeling technique to be used here is forward selection
+
+```{r}
+str(df2)
+
+```
+
+```{r}
+mod<-lm(formula = audience_score~genre,data=df2)
+summary(mod)$adj.r.squared
+```
+
+```{r}
+mod2<-lm(formula = audience_score~title_type,data=df2)
+summary(mod2)$adj.r.squared
+```
+
+```{r}
+mod3<-lm(formula = audience_score~mpaa_rating,data=df2)
+summary(mod3)$adj.r.squared
+
+```
+
+```{r}
+mod4<-lm(formula = audience_score~critics_rating,data=df2)
+summary(mod4)$adj.r.squared
+```
+
+```{r}
+mod5<-lm(formula = audience_score~audience_rating,data=df2)
+summary(mod5)$adj.r.squared
+```
+from the numeric variables , the best option is to put the imdb ratings
+
+```{r}
+mod6<-lm(formula = audience_score~imdb_rating,data=df2)
+summary(mod6)$adj.r.squared
+```
+
+Hence the first variable to put would be audience_rating.
+
+```{r}
+mod7<-lm(formula = audience_score~audience_rating+imdb_rating,data=df2)
+summary(mod7)
+```
+The adjusted R squared increased further by the addition of imdb_rating
+
+Next what could possibly explain the  model more would be the critics rating but not to forget that the critics ratings and the imdb ratings were correlated to each other
+
+```{r}
+mod8<-lm(formula = audience_score~audience_rating+imdb_rating+critics_rating,data=df2)
+summary(mod8)
+```
+We see that the  adjusted R squared did not increase considerably. Hence to  avoid redundant inforation we would drop critics_rating. Note that according to the model the critics_rating is not at all significant.
+
+```{r}
+
+mod9<-lm(formula = audience_score~audience_rating+imdb_rating+critics_score,data=df2)
+summary(mod9)
+```
+This is the same case as that of critics_rating. Hence, we would drop this also.
+
+```{r}
+
+mod10<-lm(formula = audience_score~audience_rating+imdb_rating+best_actor_win,data=df2)
+summary(mod10)
+```
+Adding thebest_actor_win variable also, the Adj. R squared is not much affected but the model sees this as a insignificant variable.
+
+Looking onto the correlations the nexxt best option would be to add the genre.
+
+```{r}
+mod11<-lm(formula = audience_score~audience_rating+imdb_rating+genre,data=df2)
+summary(mod11)
+```
+The  adjusted R squared value increases and the model takes some classes of the genre as significant. Hence, we will keep this.
+
+Further lets try to again put the critics_rating.
+```{r}
+mod12<-lm(formula = audience_score~audience_rating+imdb_rating+genre+critics_rating,data=df2)
+summary(mod12)
+```
+The adj R squared values ramains appx. the same but the critics_rating  variable is not significant. 
+
+Hence, we drop this .
+
+Considering the relationships and correaltions, no more variables seem to improve the model.
+
+```{r}
+modFinal<-lm(formula = audience_score~audience_rating+imdb_rating+genre,data=df2)
+summary(modFinal)
+```
+
+```{r}
+anova(modFinal)
+```
+
+
+
+Checking the conditions of the linear regression.
+
+1. Linear relationship
+
+```{r}
+plot(modFinal$residuals~df2$imdb_rating)
+```
+The graph appears to be a random distribution.
+
+Hence linearity condition is met.
+
+2. Normally distributed residuals
+```{r}
+hist(modFinal$residuals)
+```
+From the  histogram, the distribution of the residuals appears to roughly normal.
+
+```{r}
+qqnorm(modFinal$residuals)
+qqline(modFinal$residuals)
+```
+From the above graphs, it is quite clear that the normally distributed residual condition is met.
+
+3. Constant variability of residuals
+
+```{r}
+ggplot(modFinal,aes(x=.fitted,y=.resid))+geom_point(color='red',alpha=0.5)+geom_hline(yintercept = 0,linetype='dashed')
+```
+
+The variability if the residuals appears to be constant .
+
+4. Independence condition
+
+```{r}
+plot(modFinal$residuals)
+```
+The residuals appear to be randomly distributed hence, the condition is satisfied.
+
+Since, all the 4 conditions are met, the  model is fit for the regression made.
+
+* * *
+
+
+## Part 5: Prediction
+
+Making a prediction for -
+```{r}
+test_data<-data.frame(imdb_rating=7.4,audience_rating="Upright",genre="Comedy")
+
+predict(modFinal,newdata = test_data)
+```
+Hence, the model predicts an audience score of 81.75 for the given values.
+* * *
+
+## Part 6: Conclusion
+
+
+The audience  score depends majorly on the audience rating, genre of the movie and imdb rating.
+
+
+
+
+
+
